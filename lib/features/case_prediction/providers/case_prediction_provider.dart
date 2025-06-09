@@ -1,12 +1,37 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+class CasePredictionState {
+  final bool isLoading;
+  final String? error;
+  final CasePredictionResult? result;
+
+  const CasePredictionState({
+    this.isLoading = false,
+    this.error,
+    this.result,
+  });
+
+  CasePredictionState copyWith({
+    bool? isLoading,
+    String? error,
+    CasePredictionResult? result,
+  }) {
+    return CasePredictionState(
+      isLoading: isLoading ?? this.isLoading,
+      error: error,  // Pass null to clear error
+      result: result ?? this.result,
+    );
+  }
+}
 
 class CasePredictionResult {
   final String prediction;
   final String confidence;
   final String legalSuggestions;
 
-  CasePredictionResult({
+  const CasePredictionResult({
     required this.prediction,
     required this.confidence,
     required this.legalSuggestions,
@@ -14,28 +39,34 @@ class CasePredictionResult {
 
   factory CasePredictionResult.fromJson(Map<String, dynamic> json) {
     return CasePredictionResult(
-      prediction: json['prediction'] as String,
-      confidence: json['confidence'] as String,
-      legalSuggestions: json['legal_suggestions'] as String,
+      prediction: json['prediction'] as String? ?? 'Unknown',
+      confidence: json['confidence'] as String? ?? '0%',
+      legalSuggestions: json['legal_suggestions'] as String? ?? 'No suggestions available',
     );
   }
 }
 
-class CasePredictionProvider with ChangeNotifier {
-  final Dio _dio = Dio();
-  bool _isLoading = false;
-  String? _error;
-  CasePredictionResult? _result;
+final casePredictionProvider =
+    StateNotifierProvider<CasePredictionNotifier, CasePredictionState>((ref) {
+  return CasePredictionNotifier();
+});
 
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  CasePredictionResult? get result => _result;
+class CasePredictionNotifier extends StateNotifier<CasePredictionState> {
+  final Dio _dio = Dio();
+
+  CasePredictionNotifier() : super(const CasePredictionState());
 
   Future<void> predictCaseOutcome(String facts) async {
+    if (facts.trim().isEmpty) {
+      state = state.copyWith(
+        error: 'Please enter case details',
+        isLoading: false,
+      );
+      return;
+    }
+
     try {
-      _isLoading = true;
-      _error = null;
-      notifyListeners();
+      state = state.copyWith(isLoading: true, error: null);
 
       final response = await _dio.post(
         'http://16.171.67.61/predict/',
@@ -45,29 +76,36 @@ class CasePredictionProvider with ChangeNotifier {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
+          validateStatus: (status) => status != null && status < 500,
         ),
       );
 
-      if (response.statusCode == 200) {
-        _result = CasePredictionResult.fromJson(response.data);
+      if (response.statusCode == 200 && response.data != null) {
+        state = state.copyWith(
+          result: CasePredictionResult.fromJson(response.data),
+          isLoading: false,
+          error: null,
+        );
       } else {
-        _error = 'Failed to get prediction. Please try again.';
+        final errorMessage = response.data?['error'] ?? 'Failed to get prediction. Please try again.';
+        state = state.copyWith(
+          error: errorMessage,
+          isLoading: false,
+        );
       }
     } catch (e) {
-      _error = 'An error occurred. Please check your connection and try again.';
       if (kDebugMode) {
         print('Error in predictCaseOutcome: $e');
       }
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      state = state.copyWith(
+        error: 'An error occurred. Please check your connection and try again.',
+        isLoading: false,
+      );
+      rethrow; // Allow the UI layer to handle the error
     }
   }
 
   void reset() {
-    _isLoading = false;
-    _error = null;
-    _result = null;
-    notifyListeners();
+    state = const CasePredictionState();
   }
 } 

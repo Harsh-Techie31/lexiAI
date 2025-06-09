@@ -36,6 +36,13 @@ class HomePage extends StatelessWidget {
             ),
             _buildFeatureCard(
               context,
+              title: 'Legal Research',
+              description: 'Search laws and similar case judgments',
+              icon: Icons.search,
+              route: AppRouter.legalResearch,
+            ),
+            _buildFeatureCard(
+              context,
               title: 'Contract Analyzer',
               description: 'Extract key terms and analyze legal contracts',
               icon: Icons.description,

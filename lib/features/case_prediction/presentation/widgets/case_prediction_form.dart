@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/case_prediction_provider.dart';
 
-class CasePredictionForm extends StatefulWidget {
+class CasePredictionForm extends ConsumerStatefulWidget {
   const CasePredictionForm({super.key});
 
   @override
-  State<CasePredictionForm> createState() => _CasePredictionFormState();
+  ConsumerState<CasePredictionForm> createState() => _CasePredictionFormState();
 }
 
-class _CasePredictionFormState extends State<CasePredictionForm> {
+class _CasePredictionFormState extends ConsumerState<CasePredictionForm> {
   final _formKey = GlobalKey<FormState>();
   final _factsController = TextEditingController();
 
@@ -19,10 +19,20 @@ class _CasePredictionFormState extends State<CasePredictionForm> {
     super.dispose();
   }
 
-  void _submitForm() {
+  Future<void> _submitForm() async {
     if (_formKey.currentState?.validate() ?? false) {
-      final provider = Provider.of<CasePredictionProvider>(context, listen: false);
-      provider.predictCaseOutcome(_factsController.text);
+      try {
+        await ref.read(casePredictionProvider.notifier).predictCaseOutcome(_factsController.text);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to submit: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -30,6 +40,7 @@ class _CasePredictionFormState extends State<CasePredictionForm> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final state = ref.watch(casePredictionProvider);
 
     return Form(
       key: _formKey,
@@ -47,6 +58,7 @@ class _CasePredictionFormState extends State<CasePredictionForm> {
               TextFormField(
                 controller: _factsController,
                 maxLines: 5,
+                enabled: !state.isLoading,
                 style: TextStyle(
                   color: isDark ? Colors.white : Colors.black87,
                 ),
@@ -107,7 +119,7 @@ class _CasePredictionFormState extends State<CasePredictionForm> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _submitForm,
+                onPressed: state.isLoading ? null : _submitForm,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: theme.colorScheme.primary,
@@ -117,13 +129,22 @@ class _CasePredictionFormState extends State<CasePredictionForm> {
                   ),
                   elevation: 2,
                 ),
-                child: const Text(
-                  'Predict Outcome',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: state.isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Predict Outcome',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ],
           ),
